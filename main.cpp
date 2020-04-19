@@ -1,18 +1,16 @@
 #include <iostream>
 #include <fstream>
-#include "includes/pcap/PCapParser.h"
+#include "includes/Engine.h"
 
 using namespace std;
 
+
 int main()
 {
-    char fileName[] = "/home/sharma7/Documents/PcapFiles/samplePCAP.pcap";
-    int fileNameSize = sizeof(fileName)/sizeof(char);
-    /*
-
-  myfile.close();*/
-    PCapParser parser;
-    parser.parse(fileName, fileNameSize);
+	Engine eng;
+	eng.initialize(); //ask for source folder, destination folder;
+	eng.start();
+	//eng.showStats();
 
 
     return 0;
