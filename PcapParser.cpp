@@ -3,167 +3,312 @@
 #include <sstream>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <arpa/inet.h>
+#include <string>
 #include "includes/pcap/PCapParser.h"
+#include "includes/pcap/PacketsInformation/IPv6.h"
+
+#define GLOBAL_HEADER_SIZE 24
+#define PACKET_HEADER_SIZE 16
+#define MAX_FILE_NAME_LEN 255
 
 using namespace std;
 
 
-std::ifstream::pos_type PCapParser::getFileSize(const char* fileName)
+ifstream::pos_type PCapParser::getFileSize(const char *fileName)
 {
-    std::ifstream in(fileName, std::ifstream::ate | std::ifstream::binary);
-    return in.tellg(); 
+	ifstream in (fileName, ifstream::ate | ifstream::binary);
+	return in.tellg();
 }
 
-FileInformation PCapParser::parse(char fileName[], int lengthOfFileName){
-
-    pcapFileName = fileName;
-    
-    unsigned int fileTypeMagicNumber, 
-		 packetCount = 0;
-
-    unsigned int fileSize = getFileSize(fileName);
-
-    cout<<fileSize<<endl;
-
-    ifstream myfile (fileName, ifstream::binary);
-    myfile.read ((char *)&fileTypeMagicNumber, 4);
-    cout<<std::hex<<ntohl(fileTypeMagicNumber)<<endl;
-
-
-    myfile.seekg(20, ios::cur);// global header ends here
-
-    while(myfile.good()){ // while EOF is not encountered, do following for each packet
-        //1. Packet Header
-            //a. skip 8(4+4) bytes and then,
-            //b. read incl_len.
-            //c. skip next 4 bytes, packet header ends.
-        //2. Packet Data
-            //a. get source mac first 6 bytes.
-            //b. get destination mac
+FileInformation PCapParser::parse(char fileName[], int lengthOfFileName)
+{					
 	
-	PacketInformation packetInfo;
+	const char *pcapFile = strrchr(fileName, '/');
+	pcapFileName = pcapFile + 1;
+	pcapFileName = fileName;
 
-	packetCount++;
-        myfile.seekg(8, ios::cur); // a. skip 8(4+4) bytes and then,
+	cout << endl << "****" << pcapFileName << " ****" << endl << endl;
 
-        unsigned int packetLength;
-        myfile.read((char *)&packetLength, 4); // b. read incl_len.
-	//cout<<"incl_len: "<<(int)packetLength<<endl<<endl;
+	unsigned int fileTypeMagicNumber,
+		     packetCount = 0;
+
+	unsigned int fileSize = (unsigned int) getFileSize(fileName);
+	fileSize -= GLOBAL_HEADER_SIZE;
+
+	ifstream myfile(fileName, ifstream::binary);
+	myfile.read((char*) &fileTypeMagicNumber, 4);
+
+	myfile.seekg(20, ios::cur);	// global header ends here
+
+	while (fileSize > 0)
+	{
+		// while EOF is not encountered, do following for each packet
+
+		//if(fileSize > (GLOBAL_HEADER_SIZE + PACKET_HEADER_SIZE)) break;
+
+		//1. Packet Header
+		//a. skip 8(4+4) bytes and then,
+		//b. read incl_len.
+		//c. skip next 4 bytes, packet header ends.
+		//2. Packet Data: File contains exactly incl_len bytes of data.
+		//a. get source mac first 6 bytes.
+		//b. get destination mac
+
+		PacketInformation packetInfo;
+
+		packetCount++;
+
+		myfile.seekg(8, ios::cur);	// a. skip 8(4+4) bytes and then,
+		unsigned int packetLength = 1, pkl;
+
+		myfile.read((char*) &packetLength, 4);	// b. read incl_len.
+
+		pkl = packetLength;
+		fileSize -= (pkl + PACKET_HEADER_SIZE);
+
+		myfile.seekg(4, ios::cur);	// c skip next 4 bytes, packet header ends.
+
+		//PacketBody starts
+		//a. get destination mac first 6 bytes.
+		myfile.read((char*) &packetInfo.theDataLinkLayer.destination, 6);
+		packetLength = packetLength - 6;
+
+		//a. get source mac 6 bytes.
+		myfile.read((char*) &packetInfo.theDataLinkLayer.source, 6);
+		packetLength = packetLength - 6;
+
+		//Ethernet header ends
+		myfile.read((char*) &packetInfo.theDataLinkLayer.connectionType, 2);
+		packetLength = packetLength - 2;
+
+		if (ntohl(packetInfo.theDataLinkLayer.connectionType) == 0x8000000)
+		{
+			//IPv4 packet
+
+			packetInfo.theNetworkLayer.isIPv4 = true;
+
+			fileInfo.IPv4PacketsCount++;
+
+			// skip according to IPv4 header 
+			myfile.seekg(9, ios::cur);
+			packetLength = packetLength - 9;
+
+			myfile.read((char*) &packetInfo.theNetworkLayer.protocol, 1);
+			packetLength = packetLength - 1;
+
+			myfile.seekg(2, ios::cur);
+			packetLength = packetLength - 2;	// skip according to IPv4 header
+
+			myfile.read((char*) &packetInfo.theNetworkLayer.source.ipv4, 4);
+			packetLength = packetLength - 4;
+
+			myfile.read((char*) &packetInfo.theNetworkLayer.destination.ipv4, 4);
+			packetLength = packetLength - 4;
+			// IP header ends here
+
+			ipv4Count[packetInfo.theNetworkLayer.source.ipv4]++;
+			ipv4Count[packetInfo.theNetworkLayer.destination.ipv4]++;
+
+			if (packetInfo.theNetworkLayer.protocol == 6 || packetInfo.theNetworkLayer.protocol == 17)
+			{
+
+				if (packetInfo.theNetworkLayer.protocol == 17)
+					fileInfo.UDPpacketsCount++;
+				else
+					fileInfo.TCPpacketsCount++;
+
+				myfile.read((char*) &packetInfo.theTrasportLayer.sourcePort, 2);
+				packetLength = packetLength - 2;
+
+				myfile.read((char*) &packetInfo.theTrasportLayer.destinationPort, 2);
+				packetLength = packetLength - 2;
+
+				myfile.seekg(4, ios::cur);
+				packetLength = packetLength - 4;	//Transport layer Data unit header ends 
+
+			}
+
+			myfile.seekg(packetLength, ios::cur);
+		}
+		else if (ntohl(packetInfo.theDataLinkLayer.connectionType) == 0x86DD0000)
+		{
+
+			unsigned int payloadLen;
+
+			packetInfo.theNetworkLayer.isIPv4 = false;
+
+			myfile.seekg(3, ios::cur);
+			packetLength = packetLength - 3;
+			myfile.read((char*) &payloadLen, 2);
+			packetLength = packetLength - 2;
+
+			myfile.read((char*) &packetInfo.theNetworkLayer.protocol, 1);
+			packetLength = packetLength - 1;
+
+			myfile.seekg(1, ios::cur);
+			packetLength = packetLength - 1;
+
+			myfile.seekg(1, ios::cur);
+			packetLength = packetLength - 1;
+			myfile.read((char*) &packetInfo.theNetworkLayer.source.ipv6.address, 16);
+			packetLength = packetLength - 16;
+			myfile.read((char*) &packetInfo.theNetworkLayer.destination.ipv6.address, 16);
+			packetLength = packetLength - 16;
+
+			if (packetInfo.theNetworkLayer.protocol == 17 || packetInfo.theNetworkLayer.protocol == 6)
+			{
+
+				if (packetInfo.theNetworkLayer.protocol == 17)
+					fileInfo.UDPpacketsCount++;
+				else
+					fileInfo.TCPpacketsCount++;
+
+				myfile.read((char*) &packetInfo.theTrasportLayer.sourcePort, 2);
+				packetLength = packetLength - 2;
+
+				myfile.read((char*) &packetInfo.theTrasportLayer.destinationPort, 2);
+				packetLength = packetLength - 2;
+
+				myfile.seekg(4, ios::cur);
+				packetLength = packetLength - 4;	//Transport layer Data unit header ends 
+
+			}
+
+			fileInfo.IPv6PacketsCount++;
+			myfile.seekg(packetLength, ios::cur);
+
+			
+			ipv6Count[packetInfo.theNetworkLayer.source.ipv6]++;
+			ipv6Count[packetInfo.theNetworkLayer.destination.ipv6]++;
+		}
+		else
+		{
+			myfile.seekg(pkl - 14, ios::cur);
+		}
+
+		if (packetCount < 10)
+		{
+
+			printf("****Packet #%d ****\n", packetCount);
+
+			printf("PacketLength: %d\n", pkl);
+			cout << "source MAC: ";
+			for (int i = 0; i < 6; i++) printf("%x:", packetInfo.theDataLinkLayer.source[i]);
+			printf("\n");
+			cout << "destination MAC: ";
+			for (int i = 0; i < 6; i++) printf("%x:", packetInfo.theDataLinkLayer.destination[i]);
+			printf("\n");
+
+			packetInfo.theNetworkLayer.printAddresses();
+
+			printf("Protocol: %d\n", packetInfo.theNetworkLayer.protocol);
+
+			if (packetInfo.theNetworkLayer.protocol == 17 || packetInfo.theNetworkLayer.protocol == 6)
+			{
+
+				cout << "source Port: ";
+				printf("%u \n", (packetInfo.theTrasportLayer.sourcePort));
+				cout << "destination Port: ";
+				printf("%u \n\n\n", (packetInfo.theTrasportLayer.sourcePort));
+			}
+			else
+			{
+				cout << endl << endl;
+			}
+		}
+			
+		//writeInfoToCSV(packetInfo);
+	}	//end of while
 	
-        myfile.seekg(4, ios::cur); // c skip next 4 bytes, packet header ends.
-
-        //a. get destination mac first 6 bytes.
-        myfile.read((char *) &packetInfo.theDataLinkLayer.destination, 6);
-
-        //a. get source mac 6 bytes.
-        myfile.read((char *) &packetInfo.theDataLinkLayer.source, 6);
-
-        
-        myfile.read((char *) &packetInfo.theDataLinkLayer.connectionType, 2); //Ethernet header ends
 	
-	unsigned int sourceIP, destinationIP;
+	myfile.close();
+
+	//writeInfoToCSV(fileInfo);
+	printf("\n****File info ****\n");
+	printf("Unique IPv4 addresses: %lu \n", ipv4Count.size());
+	printf("Unique IPv6 addresses: %lu \n", ipv6Count.size());
+
+	printf("Total Packets Count: %d\n", packetCount);
+
 	
+}
 
-	if(ntohl(packetInfo.theDataLinkLayer.connectionType) == 0x8000000){
+void PCapParser::createCSVfile() {}
 
-		packetInfo.theNetworkLayer.isIPv4 = true;
+void PCapParser::writeInfoToCSV(PacketInformation packetInfo)
+{
 
-		fileInfo.IPv4PacketsCount++;
+	char fileNameCsv[MAX_FILE_NAME_LEN] = "";
+	int dotPos = strrchr(pcapFileName, '.') - pcapFileName;
+	strncpy(fileNameCsv, pcapFileName, dotPos);
+	strcat(fileNameCsv, "IPinfo.csv");
+	//fstream fout;
+	//fout.open("fileInfo.csv", ios::out | ios::app);
 
-		myfile.seekg(9, ios::cur); // skip according to IPv4 header
-        	
-        	myfile.read((char *)&packetInfo.theNetworkLayer.protocol, 1);
+}
 
-        	myfile.seekg(2, ios::cur); // skip according to IPv4 header
+void PCapParser::writeInfoToCSV(FileInformation fileInfo)
+{
 
-        	myfile.read((char *) &packetInfo.theNetworkLayer.source.ipv4, 4);
+	char fileNameCsv[MAX_FILE_NAME_LEN] = "";
+	int dotPos = strrchr(pcapFileName, '.') - pcapFileName;
+	strncpy(fileNameCsv, pcapFileName, dotPos);
+	strcat(fileNameCsv, "_IPcount.csv");
 
-        	myfile.read((char *) &packetInfo.theNetworkLayer.destination.ipv4, 4); // IP header ends here
+	csvIPinfo = new char[sizeof(strlen(fileNameCsv))];
+	strcpy(csvIPinfo, fileNameCsv);
+	fstream fout;
+	fout.open(fileNameCsv, ios::out | ios::app);
 
-		fileInfo.ipv4Count[packetInfo.theNetworkLayer.source.ipv4]++;
-		fileInfo.ipv4Count[packetInfo.theNetworkLayer.destination.ipv4]++;
+	int serialNumber = 1;
+	for (pair<IPv6, unsigned int > keyVal: ipv6Count)
+	{
+		unsigned char *result = new unsigned char[100];
 
+		fout << serialNumber++ << ", " <<
+			keyVal.first.getaddressFormated(result) << ", " <<
+			keyVal.second <<
+			"\n";
+
+		delete[] result;
 	}
-	else if(ntohl(packetInfo.theDataLinkLayer.connectionType) == 0x86DD0000){
 
-		//packetInfo.theNetworkLayer.source = new unsigned char[17];
-		//packetInfo.theNetworkLayer.destination = new unsigned char[17];
-		packetInfo.theNetworkLayer.isIPv4 = false;
+	for (pair < unsigned int, unsigned int > keyVal: ipv4Count)
+	{
 
-		fileInfo.IPv6PacketsCount++;
-		myfile.seekg(64, ios::cur);
+		unsigned char address[16];
+		int index = 0;
+		unsigned char *temporaryPointer = (unsigned char *) &keyVal.first;
+
+		for (int byte = 0; byte < 3; byte++)
+		{
+			index += snprintf((char*) address + index, 5, "%d.", temporaryPointer[byte]);
+		}
+		index += snprintf((char*) address + index, 5, "%d", temporaryPointer[3]);
+
+		fout << serialNumber++ << ", "
+			<< address
+			<< ", "
+			<< keyVal.second
+			<< "\n";
 	}
-
-
-        unsigned short sourcePort; // Transport layer Data unit header.
-        myfile.read((char *)&sourcePort, 2);
-
-        unsigned short destinationPort;
-        myfile.read((char *)&destinationPort, 2);
-
-	unsigned short int dataLen;
-        myfile.read((char *)&dataLen, 2);
-
-	myfile.seekg(2, ios::cur);//Transport layer Data unit header ends
-	
-	unsigned int skipBy = packetLength - 42;
-	
-	myfile.seekg(skipBy, ios::cur);
-
-if(packetCount > 88 && packetCount < 100){
-
-    cout<<"**** Packet #"<<std::dec<<packetCount<<" ****"<<endl;
-	
-    cout<<"packetLength: "<<packetLength<<endl;
-    
-    for(int i=0; i<6; i++ ) printf("%x ", packetInfo.theDataLinkLayer.source[i]); cout<<" :MACsource"<<endl;
-    for(int i=0; i<6; i++ ) printf("%x ", packetInfo.theDataLinkLayer.destination[i]); cout<<" :MACdestination"<<endl;
-    
-    //cout<<std::hex<<ntohl(connectionType)<<" :connectionType"<<endl;
-    //cout<<dec<< ntohl( sourceIP ) <<" :sourceIP"<<endl;	
-
-   // for(int i=0; i<4; i++) printf("%d ", packetInfo.theNetworkLayer.source[i]); cout<<" :sourceIP"<<endl;
-
-    //printf("%d ", protocol); cout<<" :protocol"<<endl;
-    //cout<< ntohl( destinationIP ) <<" :destinationIP"<<endl;	
-
-   // for(int i=0; i<4; i++) printf("%d ", packetInfo.theNetworkLayer.destination[i]); cout<<" :destinationIP"<<endl;
-
-    printf("%x ", ntohl(sourcePort) ); cout<<" :sourcePort"<<endl;
-    printf("%x ", ntohl(destinationPort) ); cout<<" :destinationPort"<<endl<<endl<<endl;
-
-}
-    
-    	}
-
-    myfile.close();
-    	cout<<"Total IPv4 packets: "<<fileInfo.IPv4PacketsCount<<endl;
-	
-    for(pair<unsigned int, unsigned int> keyValue : fileInfo.ipv4Count)
-	cout<<keyValue.first<<"->"<<keyValue.second<<endl;
-
 }
 
-PCapParser::PCapParser(){
-   
+void PCapParser::printFileInformationTillNow(FileInformation fileInfo)
+{
+
+	for (pair<IPv6, unsigned int > keyVal: ipv6Count)
+	{
+		unsigned char *result = new unsigned char[100];
+
+		cout << keyVal.first.getaddressFormated(result) << ", " <<
+			keyVal.second <<
+			"\n";
+
+		delete[] result;
+	}
 }
 
-void PCapParser::createCSVfile(){
-
-}
-
-void PCapParser::writeInfoToCSV(){ 
-
-}
-
-void PCapParser::printFileInformationTillNow(){
-
-   
-}
-
-void PCapParser::printPacketInformation(){
-   
-
-}
-
+void PCapParser::printPacketInformation() {}
