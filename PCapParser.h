@@ -50,8 +50,7 @@ class PCapParser{
         void createCSVfile();
         void writeInfoToCSV(PacketInformation packetInfo, unsigned int serialNumber);
 	void writeInfoToCSV(FileInformation fileInfo);
-        void printFileInformationTillNow( FileInformation fileInfo );
-        void printPacketInformation();
+        void printFileInformation(unsigned int packetCount);
 
 	private:
 	    char pcapFileName[MAX_FILE_NAME_LEN], 
@@ -61,7 +60,7 @@ class PCapParser{
 		 *csvIPinfo,		//just name of csv file
 		 *csvDestinationPath; // just directory path, of destination folder for csv.
 
-	    unordered_map<IPv6, unsigned int, IPv6Hasher, IPv6Comparator> ipv6Count;
+	    unordered_map<IPv6, unsigned int> ipv6Count;
 	    map<unsigned int, unsigned int> ipv4Count;
 	    FileInformation fileInfo;
 
