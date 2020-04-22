@@ -1,13 +1,3 @@
-#ifndef PCapParser_H
-#define PCapParser_H
-
-
-#include "FileInformation.h"
-#include "PacketInformation.h"
-#include "PacketsInformation/IPv6.h"
-#include <fstream>
-#include <map>
-
 /**********************************************************************************
 
 * This file is part of c++ assignment 2 and assignment 3.
@@ -26,29 +16,53 @@
 *
 *******************************************************************************/
 
+
+#ifndef PCapParser_H
+#define PCapParser_H
+
+
+#include "FileInformation.h"
+#include "PacketInformation.h"
+#include "PacketsInformation/IPv6.h"
+#include <fstream>
+#include <unordered_map>
+#include <map>
+
+#define MAX_FILE_NAME_LEN 255
+
+
 class PCapParser{
 
 	public:
         FileInformation parse(char fileName[], int length);
-        PCapParser() {}
+	void setCsvDestinationPath(char destinationDir[]);
+        PCapParser() { csvFileInfo[0] = '\0'; csvIPinfo=NULL; csvDestinationPath=NULL; ipv6Count; ipv4Count; } // will create csv in default dir.
+	PCapParser(char destinationFolder[]);	//used if a destination folder is to be choose to store .csv file.
 
 	~PCapParser() {
+
 		delete[] csvIPinfo;
-		delete[] csvFileInfo;
+		delete[] csvDestinationPath;
 	}
+
     private:
-	std::ifstream::pos_type getFileSize(const char *fileName);
+	std::ifstream::pos_type getFileSize(char fileName[]);
         void createCSVfile();
-        void writeInfoToCSV(PacketInformation packetInfo);
+        void writeInfoToCSV(PacketInformation packetInfo, unsigned int serialNumber);
 	void writeInfoToCSV(FileInformation fileInfo);
         void printFileInformationTillNow( FileInformation fileInfo );
         void printPacketInformation();
 
 	private:
-	    const char *pcapFileName;   // will be set by either listing files in a folder, or by inotify.
-	    char *csvFileInfo, *csvIPinfo; // will be set by parse method.
-	    map<IPv6, unsigned int> ipv6Count;
-	    map<unsigned int, unsigned int> ipv4Count; 
+	    char pcapFileName[MAX_FILE_NAME_LEN], 
+		 pcapFilePath[MAX_FILE_NAME_LEN];   // will be set by either listing files in a folder, or by inotify.
+
+	    char csvFileInfo[MAX_FILE_NAME_LEN], 		//just name of csv file
+		 *csvIPinfo,		//just name of csv file
+		 *csvDestinationPath; // just directory path, of destination folder for csv.
+
+	    unordered_map<IPv6, unsigned int, IPv6Hasher, IPv6Comparator> ipv6Count;
+	    map<unsigned int, unsigned int> ipv4Count;
 	    FileInformation fileInfo;
 
 };
