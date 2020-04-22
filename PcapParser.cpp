@@ -48,7 +48,6 @@ FileInformation PCapParser::parse(char fileName[], int lengthOfFileName)
 
 	const char *pcapFile = strrchr(fileName, '/'); // last occurance of '/' to get file's name.
 	strcpy(pcapFileName, pcapFile+1);	// 'pcapFileName' : just name of file
-	//pcapFileName = fileName;
 
 	cout << endl << "**** " << pcapFileName << " ****" << endl << endl;
 
@@ -214,52 +213,19 @@ FileInformation PCapParser::parse(char fileName[], int lengthOfFileName)
 			packetInfo.theDataLinkLayer.nextIsIP = false;
 			myfile.seekg(pkl - 14, ios::cur);
 		}
-
-		if (packetCount < 0)
-		{
-
-			printf("**** Packet #%d ****\n", packetCount);
-
-			printf("PacketLength: %d\n", pkl);
-			cout << "source MAC: ";
-			for (int i = 0; i < 6; i++) printf("%x:", packetInfo.theDataLinkLayer.source[i]);
-			printf("\n");
-			cout << "destination MAC: ";
-			for (int i = 0; i < 6; i++) printf("%x:", packetInfo.theDataLinkLayer.destination[i]);
-			printf("\n");
-			
-			if(ntohl(packetInfo.theDataLinkLayer.connectionType) == 0x86DD0000 || 
-				 ntohl(packetInfo.theDataLinkLayer.connectionType) == 0x8000000)
-				packetInfo.theNetworkLayer.printAddresses();
-
-			printf("Protocol: %d\n", packetInfo.theNetworkLayer.protocol);
-
-			if (packetInfo.theNetworkLayer.protocol == 17 || packetInfo.theNetworkLayer.protocol == 6)
-			{
-				cout << "source Port: ";
-				printf("%u \n", (packetInfo.theTrasportLayer.sourcePort));
-				cout << "destination Port: ";
-				printf("%u \n\n\n", (packetInfo.theTrasportLayer.sourcePort));
-			}
-			else
-			{
-				cout << endl << endl;
-			}
-		}
 			
 		writeInfoToCSV(packetInfo, packetCount);
-	}	//end of while
+
+	}//end of while
 	
 	
 	myfile.close();
 
 	writeInfoToCSV(fileInfo);
-	printf("\n****File info ****\n");
-	printf("Unique IPv4 addresses: %lu \n", ipv4Count.size());
-	printf("Unique IPv6 addresses: %lu \n", ipv6Count.size());
-	printf("Total IPv4 packets: %d \n", fileInfo.IPv6PacketsCount);
-	printf("Total IPv4 packets: %d \n", fileInfo.IPv4PacketsCount);	
-	printf("Total Packets Count: %d\n", packetCount);
+
+	printFileInformation(packetCount);
+
+	
 
 }
 
@@ -346,6 +312,15 @@ void PCapParser::writeInfoToCSV(PacketInformation packetInfo, unsigned int seria
 			 destinationPort << ", " <<
 			"\n";
 
+	cout<< endl << " \t **** Packet #" << serialNumber << " ****" << endl
+			<<"source MAC: "<< sourceMAC << endl
+			<<"destination MAC: "<< destinationMAC << endl
+			<<"source IP: "<< sourceIP << endl
+			<<"destination IP: "<< destinationIP << endl
+			<<"transport Type: "<< transportType << endl
+			<<"sourcePort : "<< sourcePort << endl
+			<<"destinationPort : "<< destinationPort << endl;
+
 }
 
 void PCapParser::writeInfoToCSV(FileInformation fileInfo)
@@ -402,19 +377,13 @@ void PCapParser::writeInfoToCSV(FileInformation fileInfo)
 	}
 }
 
-void PCapParser::printFileInformationTillNow(FileInformation fileInfo)
-{
 
-	for (pair<IPv6, unsigned int > keyVal: ipv6Count)
-	{
-		unsigned char *result = new unsigned char[100];
+void PCapParser::printFileInformation(unsigned int packetCount) {
 
-		cout << keyVal.first.getaddressFormated(result) << ", " <<
-			keyVal.second <<
-			"\n";
-
-		delete[] result;
-	}
+	printf("\n\n****File info ****\n");
+	printf("Unique IPv4 addresses: %lu \n", ipv4Count.size());
+	printf("Unique IPv6 addresses: %lu \n", ipv6Count.size());
+	printf("Total IPv4 packets: %d \n", fileInfo.IPv6PacketsCount);
+	printf("Total IPv4 packets: %d \n", fileInfo.IPv4PacketsCount);	
+	printf("Total Packets Count: %d\n", packetCount);
 }
-
-void PCapParser::printPacketInformation() {}
