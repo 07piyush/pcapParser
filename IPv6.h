@@ -1,18 +1,29 @@
+/**********************************************************************************
+
+* This file is part of c++ assignment 2 and assignment 3.
+* This file is declaration of structure "IPv6".
+* This structure is used to store 128 bit address, also to represent it in appropriate format.
+* Objective of this structure is to provide abstract form to work with ipv6 address.
+* also to derived information so as to write into a .csv file.
+
+*******************************************************************************/
+
+
 #ifndef IPv6_H
 #define IPv6_H
 
-#include<cstring>
+#include <cstring>
+#include <string>
+using namespace std;
 
 
 struct IPv6{
 	
-	unsigned char address[17];
+	unsigned char address[17];	// contains exaclty 128 bit of binary of the address.
 
-	bool operator<(const IPv6&) const;
-	bool operator==(const IPv6&) const;
-	bool operator>(const IPv6&) const;
+	bool operator < (const IPv6&) const;
 	
-
+	//This funtion returns and save address in format into result, array provided.
 	unsigned char *getaddressFormated(unsigned char result[]){
 		
 		int index = 0;
@@ -36,27 +47,33 @@ struct IPv6{
 inline bool IPv6::operator<(const IPv6& rhs) const
 {
 	return ( strcmp((char*) &this->address, (char*) &rhs.address) < 0 );
-	//if (difference < 0) result = true;
 }
 
-inline bool IPv6::operator==(const IPv6& rhs) const
+
+
+
+struct IPv6Hasher
 {
-	bool result = false;
+  size_t
+  operator()(const IPv6 & obj) const
+  {
+    string targetString = (char *)obj.address;
+    return std::hash<std::string>()( targetString );
+  }
+};
 
-	int difference = strcmp((char*) &address, (char*) &rhs.address);
-	if (difference == 0) result = true;
 
-	return result;
-}
-
-inline bool IPv6::operator>(const IPv6& rhs) const
+struct IPv6Comparator
 {
-	bool result = false;
+  bool
+  operator()(const IPv6 & obj1, const IPv6 & obj2) const
+  {
+    if ( strcmp((char*) &obj1.address, (char*) &obj2.address) == 0 )
+      return true;
+    return false;
+  }
 
-	int difference = strcmp((char*) &address, (char*) &rhs.address);
-	if (difference == 0) result = true;
+};
 
-	return result;
-}
 
 #endif
