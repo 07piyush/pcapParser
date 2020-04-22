@@ -5,6 +5,7 @@
 * This structure is used to store 128 bit address, also to represent it in appropriate format.
 * Objective of this structure is to provide abstract form to work with ipv6 address.
 * also to derived information so as to write into a .csv file.
+* It has seperate IPv6 hasher which uses nothing but std::string hasher
 
 *******************************************************************************/
 
@@ -49,31 +50,29 @@ inline bool IPv6::operator<(const IPv6& rhs) const
 	return ( strcmp((char*) &this->address, (char*) &rhs.address) < 0 );
 }
 
-
-
-
-struct IPv6Hasher
+namespace std
 {
-  size_t
-  operator()(const IPv6 & obj) const
-  {
-    string targetString = (char *)obj.address;
-    return std::hash<std::string>()( targetString );
-  }
+    template <>
+    struct hash<IPv6> : public unary_function<IPv6, size_t>
+    {
+        size_t operator()(const IPv6& obj) const
+        {
+		string targetString = (char *)obj.address;
+		return std::hash<std::string>()( targetString );
+        }
+    };
+
+
+template <>
+struct equal_to<IPv6> : public unary_function<IPv6, bool>
+{
+	bool operator()(const IPv6& x, const IPv6& y) const
+	{
+        	return false;
+	}
 };
 
-
-struct IPv6Comparator
-{
-  bool
-  operator()(const IPv6 & obj1, const IPv6 & obj2) const
-  {
-    if ( strcmp((char*) &obj1.address, (char*) &obj2.address) == 0 )
-      return true;
-    return false;
-  }
-
-};
+} 
 
 
 #endif
