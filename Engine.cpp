@@ -1,3 +1,17 @@
+/******************************************************************************
+* Funtions definitions in this file:
+	* void Engine::initialize()
+	* void Engine::start()
+	* void *Engine::watchSourceFolder(void *sourceFolder)
+	* int Engine::getFiles(vector<string> &files)
+	* void Engine::setDestinationFolder(char destinationFolder[])
+	
+
+* Global variable: queue<string> remainingFiles.
+* Static data member: pthread_mutex_t Engine::mutex. 
+	
+*******************************************************************************/
+
 #include <iostream>
 #include <cstring>
 #include <vector>
@@ -6,11 +20,12 @@
 #include <dirent.h>
 #include <errno.h>
 #include <pthread.h>
-#include <chrono>
 #include "includes/Engine.h"
 #include <sys/inotify.h>
 #include <unistd.h>
 #include "includes/pcap/PCapParser.h"
+#include <queue>
+
 
 using namespace std;
 
@@ -18,9 +33,15 @@ using namespace std;
 #define NAME_LEN 	32
 #define EVENT_SIZE	(sizeof(struct inotify_event))
 #define BUF_LEN 	1024 *(EVENT_SIZE + NAME_LEN + 1)
+#define MAX_FILE_NAME_LEN 255
+
+extern queue<string> remainingFiles;
+pthread_mutex_t Engine::mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void Engine::initialize()
 {
+	//This funtion simply read source folder and destination folder from user.
+	// and set its values to data members.
 
 	char path[MAX_PATH_LEN] = "/home/sharma7/Documents/PcapFiles";
 	struct stat statbuf;
@@ -36,7 +57,7 @@ void Engine::initialize()
 		{
 			if (S_ISDIR(statbuf.st_mode))
 			{
-				sourceFolder = new char[strlen(path)];
+				//sourceFolder = new char[strlen(path) + 1 ];
 				strcpy(sourceFolder, path);
 				break;
 			}
@@ -62,7 +83,7 @@ void Engine::initialize()
 		{
 			if (S_ISDIR(statbuf.st_mode))
 			{
-				destinationFolder = new char[strlen(path)];
+				//destinationFolder = new char[strlen(path) + 1];
 				strcpy(destinationFolder, path);
 				break;
 			}
@@ -78,12 +99,60 @@ void Engine::initialize()
 
 }
 
-int Engine::getFiles(char dir[], vector<string> &files)
-{
 
+void Engine::start()
+{
+	/*This is the actual driver of the whole Engine.
+	   Following are the tasks it perform.
+		1) Initialize seperate thread for inotify to watch over sourceFolder.
+		2) get list of all existing pcap files in the souce folder, store them in vector: files.
+
+	*/
+	vector<string> files;
+	files.reserve(10);
+		
+	pthread_create(&pthreadid, NULL, watchSourceFolder, (void *)sourceFolder);
+
+	getFiles(files); //get the existing files in the sourceFolder
+
+	for(string file : files){
+
+		char filePath[MAX_FILE_NAME_LEN];
+
+		strcpy(filePath, sourceFolder);
+		strcat(filePath, "/");
+
+		strcat(filePath, file.c_str());
+		
+		PCapParser parser(destinationFolder);
+		
+		parser.parse(filePath, file.size());
+	}
+
+	while(true) {
+
+		if(!remainingFiles.empty())
+		{
+			sleep(2);
+			PCapParser parser(destinationFolder);
+			string targetFile(remainingFiles.front());
+			remainingFiles.pop();
+			parser.parse((char *)targetFile.c_str(), targetFile.size());
+			
+		}
+	}
+
+}
+
+
+
+int Engine::getFiles(vector<string> &files)
+{
+// This funtion lists all existing pcap files in the souce folder, store them in vector: files.
+	
 	DIR * dp;
 	struct dirent * dirp;
-	string directory(dir);
+	string directory(sourceFolder);
 
 	if ((dp = opendir(directory.c_str())) == NULL)
 	{
@@ -105,43 +174,17 @@ int Engine::getFiles(char dir[], vector<string> &files)
 	return 0;
 }
 
-void Engine::start()
-{
-	/*This is the actual driver of the whole Engine.
-	   Following are the tasks it perform.
-		1) Initialize seperate thread for inotify to watch over sourceFolder.
-		2)
-
-	*/
-	vector<string> files;
-	files.reserve(10);
-		
-	pthread_create(&pthreadid, NULL, watchSourceFolder, (void *)sourceFolder);
-
-	getFiles(sourceFolder, files); //get the existing files in the sourceFolder
-
-	for(string file : files){
-
-		char * filePath = new char[strlen(sourceFolder) + file.size() + 1]; 
-		strcpy(filePath, sourceFolder);
-		strcat(filePath, "/");
-		strcat(filePath, file.c_str());
-		PCapParser parser;
-		parser.parse(filePath, file.size());
-		
-		
-		delete[] filePath;
-	}
-
-	while(true) {  }
-
-}
-
 void *Engine::watchSourceFolder(void *sourceFolder)
 {
 
-	cout << "watching folder: " << sourceFolder << endl;
-	
+/******************************************************************************
+* This funtion run on seperate thread and keep a watch on any new pcap file creation.
+* as soon as a new file is created, it is parsed and .csv are stored in destination folder.
+
+********************************************************************************/
+
+
+	cout << "watching folder: " << (char *)sourceFolder << endl;
 
 	int length, i = 0;
 	int fd;
@@ -155,8 +198,7 @@ void *Engine::watchSourceFolder(void *sourceFolder)
 		perror("inotify_init");
 	}
 
-	wd = inotify_add_watch(fd, (char *)sourceFolder,
-		IN_MODIFY | IN_CREATE | IN_DELETE);
+	wd = inotify_add_watch(fd, (char *)sourceFolder, IN_CREATE );
 
 	while (true)
 	{
@@ -185,49 +227,28 @@ void *Engine::watchSourceFolder(void *sourceFolder)
 						//printf("The directory %s was created.\n", event->name);
 					}
 					else
-					{	cout<< event->name << " added" <<endl;
-
+					{	
 						//File is created check if it is pcap, parse if is true;
 						char *dotPtr = strchr(event->name, '.');
 
 						if (dotPtr != NULL && strcmp(dotPtr, ".pcap") == 0)
 						{
+							pthread_mutex_lock(&mutex);
 							char * filePath = new char[strlen((char *)sourceFolder) + (int)strlen(event->name) + 1]; 
 							strcpy(filePath, (char *)sourceFolder);
 							strcat(filePath, "/");
 							strcat(filePath, event->name);
-							PCapParser parser;
-							parser.parse(filePath, strlen(filePath));
-							//cout << filePath << endl;
+							string filePathCopy(filePath);
+							remainingFiles.push(filePathCopy);
 
 							delete[] filePath;
+							pthread_mutex_unlock(&mutex);
 						}
 						
 						
 					}
 				}
-				else if (event->mask &IN_DELETE)
-				{
-					if (event->mask &IN_ISDIR)
-					{
-						//printf("The directory %s was deleted.\n", event->name);
-					}
-					else
-					{
-						//printf("The file %s was deleted.\n", event->name);
-					}
-				}
-				else if (event->mask &IN_MODIFY)
-				{
-					if (event->mask &IN_ISDIR)
-					{
-						//printf("The directory %s was modified.\n", event->name);
-					}
-					else
-					{
-						//printf("The file %s was modified.\n", event->name);
-					}
-				}
+				
 			}
 			i += EVENT_SIZE + event->len;
 		}
@@ -239,4 +260,4 @@ void *Engine::watchSourceFolder(void *sourceFolder)
 
 }
 
-void Engine::showStats() {}
+void Engine::setDestinationFolder(char destinationFolder[]) { strcpy(this->destinationFolder, destinationFolder); }
