@@ -26,9 +26,7 @@ struct FileInformation{
 	unsigned int IPv6PacketsCount;
 	unsigned int TCPpacketsCount;
 	unsigned int UDPpacketsCount;
-
-	//map<unsigned int, unsigned int> ipv4Count; 
-	//map<IPv6, unsigned int> ipv6Count;
+	unsigned int fileSize;
 	
 	FileInformation(){
 
@@ -36,13 +34,10 @@ struct FileInformation{
 	    IPv6PacketsCount = 0;
 	    TCPpacketsCount = 0;
 	    UDPpacketsCount = 0;
+	    fileSize = 0;
 	}
 
-	~FileInformation() { 
-		//ipv6Count.clear(); 
-		//ipv4Count.clear();
-		
-	}
+	~FileInformation() { 	}
 	
 };
 
