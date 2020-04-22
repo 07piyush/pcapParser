@@ -1,5 +1,7 @@
 # pcapParser File structure
 
+~> tree -d /proc/self/
+/proc/self/
 |-- Engine.cpp
 |-- main.cpp
 |-- PCapParser.cpp
