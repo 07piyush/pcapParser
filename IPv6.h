@@ -68,7 +68,7 @@ struct equal_to<IPv6> : public unary_function<IPv6, bool>
 {
 	bool operator()(const IPv6& x, const IPv6& y) const
 	{
-        	return false;
+        	return (strcmp((char *)x.address, (char *)y.address) == 0);
 	}
 };
 
