@@ -32,12 +32,12 @@ struct IPv6{
 		for(int byte = 0; byte < 14; byte+=2){
 			unsigned char ch1, ch2;
 			ch1 = address[byte]; ch2 = address[byte+1];
-			index += snprintf((char *)result+index, 4, "%x", ch1);
-			index += snprintf((char *)result+index, 4, "%x:", ch2);
+			index += snprintf((char *)result+index, 4, "%02x", ch1);
+			index += snprintf((char *)result+index, 4, "%02x:", ch2);
 		}
 		ch1 = address[14]; ch2 = address[15];
-		index += snprintf((char *)result+index, 4, "%x", ch1);
-		index += snprintf((char *)result+index, 4, "%x", ch2);
+		index += snprintf((char *)result+index, 4, "%02x", ch1);
+		index += snprintf((char *)result+index, 4, "%02x", ch2);
 		
 
 	return result;
