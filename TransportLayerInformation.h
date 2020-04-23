@@ -26,12 +26,12 @@ struct TransportLayerInformation{
 	void getFormatedSource(unsigned char result[])
 	{
 
-		snprintf((char *)result, 6, "%d", sourcePort);
+		snprintf((char *)result, 5, "%02x", ntohl(sourcePort));
 	}
 
 	void getFormatedDestination(unsigned char result[])
 	{
-		snprintf((char *)result, 6, "%d", destinationPort);
+		snprintf((char *)result, 5, "%02x", ntohl(destinationPort));
 	}
 
 	TransportLayerInformation() { }
