@@ -219,7 +219,7 @@ void *Engine::watchSourceFolder(void *sourceFolder)
 			if (event->len)
 			{
 
-				if (event->mask &IN_CREATE)
+				if (event->mask &IN_CLOSE_WRITE)
 				{
 
 					if (event->mask &IN_ISDIR)
